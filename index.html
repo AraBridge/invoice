@@ -82,15 +82,16 @@
   .chip.s2{color:var(--ok);border-color:#b6ddc7;background:#f0f8f3}
 
   /* ============ PAPER : ARA BRIDGE Proforma Invoice ============ */
-  .pwrap{display:flex;justify-content:center}
-  .paper{background:#fff;width:100%;max-width:800px;padding:22px 26px 26px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.07);color:#000;font-size:12px}
+  .pwrap{display:block;width:100%;overflow:hidden}
+  .pscale{transform-origin:top left}
+  .paper{background:#fff;width:800px;min-width:800px;padding:22px 26px 26px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.07);color:#000;font-size:12px}
   .p-head{display:grid;grid-template-columns:210px 1fr 210px;align-items:center;margin-bottom:12px}
   .p-logo img{max-width:200px;max-height:88px;display:block}
   .p-logo .txt{font-weight:800;font-size:19px;color:var(--navy);letter-spacing:-.02em;line-height:1.15}
   .p-logo .txt small{display:block;font-size:10px;font-weight:600;letter-spacing:.06em;color:#5a6a80}
   .p-title{text-align:center}
-  .p-title h1{margin:0;font-size:25px;font-weight:700;letter-spacing:.14em}
-  .p-title h2{margin:1px 0 0;font-size:18px;font-weight:600;letter-spacing:.01em}
+  .p-title h1{margin:0;font-size:25px;font-weight:700;letter-spacing:.14em;white-space:nowrap}
+  .p-title h2{margin:1px 0 0;font-size:18px;font-weight:600;letter-spacing:.01em;white-space:nowrap}
   .p-stamp{text-align:right}
   .p-stamp img{max-width:92px;max-height:92px}
 
@@ -132,7 +133,9 @@
     header.app,.no-print{display:none !important}
     main{padding:0;max-width:none}
     .ws{display:block}
-    .paper{border:none;box-shadow:none;max-width:none;padding:0}
+    .paper{border:none;box-shadow:none;width:100%;min-width:0;padding:0}
+    .pscale{transform:none !important}
+    .pwrap{height:auto !important}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -193,10 +196,9 @@
         <div class="bar">
           <button class="b-wine" id="btnPrint">인쇄 / PDF</button>
           <button class="b-dark" id="btnPng">PNG 저장</button>
-          <button class="b-kakao" id="btnShareFile">이미지 파일로 보내기</button>
+          <button class="b-kakao" id="btnShareFile">카카오톡·문자로 이미지 보내기</button>
         </div>
         <div class="bar" style="margin-top:8px">
-          <button id="btnShare">카카오톡 카드로 보내기</button>
           <button id="btnMsg">전송 문구 복사</button>
           <button class="b-dark" id="btnSaveDoc">거래 내역에 저장</button>
         </div>
@@ -204,7 +206,7 @@
       </div>
     </div>
 
-    <div class="pwrap"><div class="paper" id="paper"></div></div>
+    <div class="pwrap" id="pwrap"><div class="pscale" id="pscale"><div class="paper" id="paper"></div></div></div>
   </div>
 </section>
 
@@ -447,7 +449,18 @@ function renderPaper(){
    + "</tbody></table>"
 
    + "<div class='p-note'><div class='lbl'>** NOTE</div>"+esc(doc.note)+"</div>";
+  fitPaper();
 }
+
+/* ---------- preview scaling (paper is always 800px; shrink to fit screen) ---------- */
+function fitPaper(){
+  var w=$("pwrap").clientWidth, ps=$("pscale"), paper=$("paper");
+  if(!w) return;
+  var sc=Math.min(1,w/800);
+  ps.style.transform="scale("+sc+")";
+  $("pwrap").style.height=(paper.offsetHeight*sc)+"px";
+}
+window.addEventListener("resize",fitPaper);
 
 /* ---------- lines editor ---------- */
 function renderLines(){
@@ -484,7 +497,9 @@ function fileToB64(file){
 /* ---------- export / share ---------- */
 async function toCanvas(){
   if(typeof html2canvas!=="function") throw new Error("이미지 변환 스크립트를 불러오지 못했습니다.");
-  return await html2canvas($("paper"),{scale:3,backgroundColor:"#ffffff",useCORS:true});
+  var ps=$("pscale"), prev=ps.style.transform; ps.style.transform="none";
+  try{ return await html2canvas($("paper"),{scale:3,backgroundColor:"#ffffff",useCORS:true,width:800,windowWidth:1200}); }
+  finally{ ps.style.transform=prev; }
 }
 function fileName(){
   return (doc.no||"거래명세서")+"_"+(doc.to||"").replace(/[\\/:*?"<>|]/g,"")+".png";
@@ -547,7 +562,7 @@ async function shareFile(){
     }else{
       var a=document.createElement("a"); a.download=fileName(); a.href=cv.toDataURL("image/png"); a.click();
       try{ await navigator.clipboard.writeText(buildMsg()); }catch(e2){}
-      $("shareMsg").innerHTML="PC에서는 PNG를 다운로드 폴더에 저장하고 전송 문구를 클립보드에 복사했습니다. 카카오톡 PC 채팅방에 파일을 끌어다 놓고 Ctrl+V로 문구를 붙여넣으세요. (폰에서 열면 카카오톡 공유 시트가 바로 열립니다)";
+      $("shareMsg").innerHTML="PC 브라우저는 카카오톡·문자로 직접 보낼 수 없습니다. PNG를 다운로드 폴더에 저장하고 전송 문구를 복사했으니, 카카오톡 PC 채팅방에 파일을 끌어다 놓고 Ctrl+V 하세요. 폰에서 이 버튼을 누르면 카카오톡·메시지로 바로 보낼 수 있습니다.";
     }
   }catch(e){ $("shareMsg").innerHTML="<span style='color:#9b1c1c'>"+esc(e.message)+"</span>"; }
 }
@@ -715,6 +730,7 @@ function tab(name){
   ["write","ledger","cust","prod","set"].forEach(function(t){ $("tab-"+t).classList.toggle("hide",t!==name); });
   document.querySelectorAll("nav.tabs button").forEach(function(b){ b.setAttribute("aria-selected",String(b.dataset.tab===name)); });
   if(name==="cust")renderCust(); if(name==="prod")renderProd(); if(name==="set")bindSet(); if(name==="ledger")renderLedger();
+  if(name==="write")setTimeout(fitPaper,0);
 }
 
 function wire(){
@@ -754,7 +770,6 @@ function wire(){
   };
   $("btnPrint").onclick=function(){ renderPaper(); window.print(); };
   $("btnPng").onclick=savePng;
-  $("btnShare").onclick=shareKakao;
   $("btnShareFile").onclick=shareFile;
   $("btnMsg").onclick=copyMsg;
 
