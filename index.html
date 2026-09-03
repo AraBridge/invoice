@@ -193,9 +193,10 @@
         <div class="bar">
           <button class="b-wine" id="btnPrint">인쇄 / PDF</button>
           <button class="b-dark" id="btnPng">PNG 저장</button>
-          <button class="b-kakao" id="btnShare">공유 → 카카오톡</button>
+          <button class="b-kakao" id="btnShareFile">이미지 파일로 보내기</button>
         </div>
         <div class="bar" style="margin-top:8px">
+          <button id="btnShare">카카오톡 카드로 보내기</button>
           <button id="btnMsg">전송 문구 복사</button>
           <button class="b-dark" id="btnSaveDoc">거래 내역에 저장</button>
         </div>
@@ -528,13 +529,21 @@ async function shareKakao(){
   $("shareMsg").textContent="이미지를 만드는 중…";
   try{
     var cv=await toCanvas();
-    if(kakaoReady()){ await shareViaKakaoSdk(cv); return; }
+    if(!kakaoReady()) throw new Error("카카오 SDK를 사용할 수 없는 환경입니다. '이미지 파일로 보내기'를 사용하세요.");
+    await shareViaKakaoSdk(cv);
+  }catch(e){ $("shareMsg").innerHTML="<span style='color:#9b1c1c'>"+esc(e.message)+"</span>"; }
+}
+/* 이미지 파일 자체를 전송: 폰=공유 시트(카카오톡에 사진으로 첨부), PC=PNG 저장+문구 복사 */
+async function shareFile(){
+  $("shareMsg").textContent="이미지를 만드는 중…";
+  try{
+    var cv=await toCanvas();
     var blob=await new Promise(function(res){ cv.toBlob(res,"image/png"); });
     var f=new File([blob],fileName(),{type:"image/png"});
     var mobile=/Android|iPhone|iPad/i.test(navigator.userAgent);
     if(mobile && navigator.canShare && navigator.canShare({files:[f]})){
       await navigator.share({files:[f],title:doc.no||"거래명세서",text:buildMsg()});
-      $("shareMsg").textContent="공유 시트에서 카카오톡을 선택하세요.";
+      $("shareMsg").textContent="공유 시트에서 카카오톡 → 채팅방을 선택하면 사진으로 전송됩니다.";
     }else{
       var a=document.createElement("a"); a.download=fileName(); a.href=cv.toDataURL("image/png"); a.click();
       try{ await navigator.clipboard.writeText(buildMsg()); }catch(e2){}
@@ -746,6 +755,7 @@ function wire(){
   $("btnPrint").onclick=function(){ renderPaper(); window.print(); };
   $("btnPng").onclick=savePng;
   $("btnShare").onclick=shareKakao;
+  $("btnShareFile").onclick=shareFile;
   $("btnMsg").onclick=copyMsg;
 
   $("btnSaveDoc").onclick=async function(){
