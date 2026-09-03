@@ -512,16 +512,14 @@ async function shareViaKakaoSdk(cv){
   var c=calc();
   var site=(state.supplier.siteUrl||location.href.split("?")[0]).trim();
   var view=site+(site.indexOf("?")>=0?"&":"?")+"img="+encodeURIComponent(url);
-  var items=c.rows.filter(function(r){return r.l.name&&r.q>0}).map(function(r){return r.l.name+(r.l.vintage?" "+r.l.vintage:"")+" "+won(r.q)+(r.l.unit||"병")}).join(", ");
   Kakao.Share.sendDefault({
     objectType:"feed",
     content:{
       title:"거래명세서 "+(doc.no||""),
-      description:items+"\n합계 "+won(c.total)+"원 (VAT 포함)",
+      description:(doc.to||""),
       imageUrl:url, imageWidth:up.infos.original.width, imageHeight:up.infos.original.height,
       link:{webUrl:view,mobileWebUrl:view}
-    },
-    buttons:[{title:"명세서 크게 보기",link:{webUrl:view,mobileWebUrl:view}}]
+    }
   });
   $("shareMsg").textContent="카카오톡 선택창에서 받는 분을 고르고 전송하세요.";
 }
@@ -778,13 +776,17 @@ function wire(){
   $("btnClrStamp").onclick=async function(){ state.supplier.stamp=""; await save(); renderPaper(); };
 }
 
-/* ---------- recipient viewer (?img=) ---------- */
+/* ---------- recipient viewer (?img=) : 받는 사람에게는 이미지만 보입니다 ---------- */
 (function(){
-  var m=/[?&]img=([^&]+)/.exec(location.search);
+  var m=/[?&]img=([^&#]+)/.exec(location.search);
   if(!m) return;
-  var u=decodeURIComponent(m[1]);
-  if(!/^https:\/\/[a-z0-9.\-]*kakaocdn\.net\//i.test(u)) return;
-  document.body.innerHTML="<div style='background:#fff;min-height:100vh;padding:12px;text-align:center'><img src='"+u.replace(/'/g,"")+"' style='max-width:100%;height:auto' alt='거래명세서'><div style='margin-top:10px;font-size:12px;color:#666'>이미지를 길게 눌러 저장할 수 있습니다.</div></div>";
+  var u="";
+  try{ u=decodeURIComponent(m[1]); }catch(e){ u=m[1]; }
+  var ok=/^https:\/\/[^\s'"<>]+$/i.test(u);
+  document.documentElement.innerHTML="<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>거래명세서</title></head><body style='margin:0;background:#fff'>"
+    +(ok?"<div style='padding:8px;text-align:center'><img src='"+u.replace(/'/g,"")+"' style='max-width:100%;height:auto' alt='거래명세서'><div style='margin-top:10px;font-size:12px;color:#666;font-family:sans-serif'>이미지를 길게 눌러 저장할 수 있습니다.</div></div>"
+        :"<div style='padding:40px;text-align:center;font-family:sans-serif;color:#666'>이미지를 불러올 수 없습니다.</div>")
+    +"</body>";
   throw new Error("viewer-mode");
 })();
 /* ---------- boot ---------- */
