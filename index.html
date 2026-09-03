@@ -536,9 +536,11 @@ async function toCanvas(){
   try{ return await html2canvas($("paper"),{scale:3,backgroundColor:"#ffffff",useCORS:true,width:800,windowWidth:1200}); }
   finally{ ps.style.transform=prev; }
 }
-function fileName(){
-  return (doc.no||"거래명세서")+"_"+(doc.to||"").replace(/[\\/:*?"<>|]/g,"")+".png";
+/* 파일명: (주)아라브릿지 와인거래명세서_YYYYMMDD */
+function baseName(){
+  return "(주)아라브릿지 와인거래명세서_"+(doc.date||todayISO()).replace(/-/g,"");
 }
+function fileName(){ return baseName()+".png"; }
 async function savePng(){
   $("shareMsg").textContent="이미지를 만드는 중…";
   try{
@@ -806,7 +808,12 @@ function wire(){
     if(!confirm("작성 중인 내용을 지우고 새로 시작할까요?"))return;
     doc=newDoc(); doc.no=nextNo(); bindDoc(); renderLines(); renderPaper();
   };
-  $("btnPrint").onclick=async function(){ renderPaper(); await saveDoc(true); window.print(); };
+  $("btnPrint").onclick=async function(){
+    renderPaper(); await saveDoc(true);
+    var t=document.title; document.title=baseName();   /* PDF 저장 시 기본 파일명 */
+    window.addEventListener("afterprint",function r(){ document.title=t; window.removeEventListener("afterprint",r); });
+    window.print();
+  };
   $("btnPng").onclick=async function(){ await saveDoc(true); savePng(); };
   $("btnShareFile").onclick=async function(){ await saveDoc(true); shareFile(); };
 
