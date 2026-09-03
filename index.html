@@ -127,13 +127,13 @@
 
   @media (max-width:1120px){.ws{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
 
-  @page{size:A4 portrait;margin:10mm}
+  @page{size:A4 portrait;margin:0}
   @media print{
-    body{background:#fff}
+    html,body{background:#fff;margin:0;padding:0}
     header.app,.no-print{display:none !important}
     main{padding:0;max-width:none}
     .ws{display:block}
-    .paper{border:none;box-shadow:none;width:100%;min-width:0;padding:0}
+    .paper{border:none;box-shadow:none;width:100%;min-width:0;padding:12mm 12mm 10mm;page-break-after:avoid}
     .pscale{transform:none !important}
     .pwrap{height:auto !important}
   }
@@ -279,6 +279,11 @@
         <div class="field"><label for="sSiteUrl">사이트 주소 (https://…)</label><input id="sSiteUrl" placeholder="https://아이디.github.io/invoice/"></div>
       </div>
       <div class="mini" id="kakaoState"></div>
+      <div class="sect">Google 시트 연동 (PC·폰·동료 공용 기록)</div>
+      <div class="hint">연동하면 거래처·품목·거래 내역이 회사 Google 시트에 저장되어 어느 기기에서 열어도 같은 데이터를 보고, 관리번호도 겹치지 않습니다. 이 주소는 기기마다 한 번씩 입력해야 합니다.</div>
+      <div class="field"><label for="sSheetUrl">Google 시트 연동 URL (Apps Script 웹 앱, …/exec)</label><input id="sSheetUrl" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      <div class="bar"><button class="b-sm" id="btnSheetTest">연결 테스트</button><button class="b-sm" id="btnSheetSync">시트에서 다시 불러오기</button></div>
+      <div class="mini" id="sheetState" style="margin-top:6px"></div>
       <div class="row">
         <div class="field"><label for="sLogo">로고 이미지</label><input type="file" id="sLogo" accept="image/*"></div>
         <div class="field"><label for="sStamp">직인 이미지</label><input type="file" id="sStamp" accept="image/*"></div>
@@ -366,8 +371,11 @@ function toast(m,err){
 }
 function nextNo(){
   var d=(doc&&doc.date||todayISO()).replace(/-/g,"");
-  var used=state.seq[d]||0;
-  return (state.supplier.prefix||"ARAPI")+"_"+d+(used>0?"_"+String(used+1):"");
+  var base=(state.supplier.prefix||"ARAPI")+"_"+d;
+  var used=state.archive.filter(function(a){return a.no===base||a.no.indexOf(base+"_")===0}).length;
+  var local=state.seq[d]||0;
+  used=Math.max(used,local);
+  return base+(used>0?"_"+String(used+1):"");
 }
 function bump(){
   var d=(doc.date||todayISO()).replace(/-/g,"");
@@ -450,6 +458,34 @@ function renderPaper(){
 
    + "<div class='p-note'><div class='lbl'>** NOTE</div>"+esc(doc.note)+"</div>";
   fitPaper();
+}
+
+/* ---------- Google Sheets sync ---------- */
+function sheetOn(){ return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test((state.supplier.sheetUrl||"").trim()); }
+async function sheetApi(payload){
+  var r=await fetch(state.supplier.sheetUrl.trim(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  var j=await r.json();
+  if(!j.ok) throw new Error(j.error||"시트 오류");
+  return j;
+}
+async function sheetPush(payload,label){
+  if(!sheetOn()) return;
+  try{ await sheetApi(payload); }
+  catch(e){ toast("시트 저장 실패("+(label||payload.action)+"): "+e.message+" — 이 기기에는 저장됐습니다.",1); }
+}
+async function sheetLoad(silent){
+  if(!sheetOn()) return false;
+  try{
+    var j=await sheetApi({action:"load"});
+    state.customers=j.customers||[];
+    if(j.products&&j.products.length) state.products=j.products;
+    else await sheetApi({action:"saveProducts",list:state.products});
+    state.archive=(j.archive||[]).filter(function(a){return a.doc}).map(function(a){ a.id=a.no; return a; });
+    await save();
+    if(!silent) toast("시트에서 불러왔습니다. 거래 "+state.archive.length+"건, 거래처 "+state.customers.length+"곳");
+    return true;
+  }catch(e){ if(!silent) toast("시트 연결 실패: "+e.message,1); return false; }
 }
 
 /* ---------- preview scaling (paper is always 800px; shrink to fit screen) ---------- */
@@ -608,7 +644,7 @@ function renderCust(){
   w.innerHTML=h+"</tbody></table>";
   w.querySelectorAll("[data-use]").forEach(function(b){b.onclick=function(){useCust(state.customers[+b.dataset.use]);tab("write")}});
   w.querySelectorAll("[data-dc]").forEach(function(b){b.onclick=function(){
-    if(!confirm("삭제할까요?"))return; state.customers.splice(+b.dataset.dc,1); save(); renderCust(); fillCustSel();}});
+    if(!confirm("삭제할까요?"))return; state.customers.splice(+b.dataset.dc,1); save(); renderCust(); fillCustSel(); sheetPush({action:"saveCustomers",list:state.customers},"거래처");}});
 }
 function useCust(c){ if(!c)return; doc.to=c.name||""; doc.attn=c.attn||""; doc.phone=c.phone||""; bindDoc(); renderPaper(); }
 
@@ -632,10 +668,10 @@ function renderProd(){
   w.innerHTML=h+"</tbody></table>";
   w.querySelectorAll("input[data-i]").forEach(function(inp){
     inp.onchange=function(){ var p=state.products[+inp.dataset.i],f=inp.dataset.f;
-      p[f]=(f==="price")?num(inp.value):inp.value; save(); fillProdSel(); };
+      p[f]=(f==="price")?num(inp.value):inp.value; save(); fillProdSel(); sheetPush({action:"saveProducts",list:state.products},"품목"); };
   });
   w.querySelectorAll("[data-dp]").forEach(function(b){b.onclick=function(){
-    if(!confirm("삭제할까요?"))return; state.products.splice(+b.dataset.dp,1); save(); renderProd(); fillProdSel();}});
+    if(!confirm("삭제할까요?"))return; state.products.splice(+b.dataset.dp,1); save(); renderProd(); fillProdSel(); sheetPush({action:"saveProducts",list:state.products},"품목");}});
 }
 
 /* ---------- ledger ---------- */
@@ -675,13 +711,15 @@ function renderLedger(){
     w.innerHTML=h+"</tbody></table>";
     w.querySelectorAll("[data-st]").forEach(function(b){b.onclick=function(){
       var a=state.archive.find(function(x){return x.id===b.dataset.st}); if(!a)return;
-      a.status=((a.status||0)+1)%3; save(); renderLedger();}});
+      a.status=((a.status||0)+1)%3; save(); renderLedger(); sheetPush({action:"setStatus",no:a.no,status:a.status},"상태");}});
     w.querySelectorAll("[data-op]").forEach(function(b){b.onclick=function(){
       var a=state.archive.find(function(x){return x.id===b.dataset.op}); if(!a)return;
       doc=JSON.parse(JSON.stringify(a.doc)); bindDoc(); renderLines(); renderPaper(); tab("write");}});
     w.querySelectorAll("[data-da]").forEach(function(b){b.onclick=function(){
       if(!confirm("이 거래를 삭제할까요?"))return;
-      state.archive=state.archive.filter(function(x){return x.id!==b.dataset.da}); save(); renderLedger();}});
+      var del=state.archive.find(function(x){return x.id===b.dataset.da});
+      state.archive=state.archive.filter(function(x){return x.id!==b.dataset.da}); save(); renderLedger();
+      if(del) sheetPush({action:"deleteDoc",no:del.no},"삭제");}});
   }
 
   var agg={};
@@ -712,13 +750,14 @@ function exportCsv(){
 }
 
 /* ---------- settings ---------- */
-var SF={sName:"name",sAddr1:"addr1",sAddr2:"addr2",sTel:"tel",sFax:"fax",sEmail:"email",sPerson:"person",sPhone:"phone",sPrefix:"prefix",sKakaoKey:"kakaoKey",sSiteUrl:"siteUrl"};
+var SF={sName:"name",sAddr1:"addr1",sAddr2:"addr2",sTel:"tel",sFax:"fax",sEmail:"email",sPerson:"person",sPhone:"phone",sPrefix:"prefix",sKakaoKey:"kakaoKey",sSiteUrl:"siteUrl",sSheetUrl:"sheetUrl"};
 function bindSet(){
   Object.keys(SF).forEach(function(id){ $(id).value=state.supplier[SF[id]]||""; });
   var st=$("kakaoState");
   if(!(state.supplier.kakaoKey||"").trim()) st.textContent="상태: 키 미등록 → PC에서는 PNG 저장, 폰에서는 기기 공유 시트 사용";
   else if(location.protocol.indexOf("http")!==0) st.textContent="상태: 키는 있으나 파일을 로컬(file://)에서 열어 카카오 SDK를 쓸 수 없습니다. 사이트 주소로 접속하세요";
   else st.textContent=kakaoReady()?"상태: 카카오톡 공유 사용 가능":"상태: 카카오 SDK 초기화 실패 — 키를 확인하세요";
+  $("sheetState").textContent=sheetOn()?"상태: 시트 연동 중 (거래 "+state.archive.length+"건, 거래처 "+state.customers.length+"곳)":"상태: 미연동 — 이 기기에만 저장됩니다";
 }
 
 /* ---------- bind ---------- */
@@ -752,6 +791,7 @@ function wire(){
     var rec={name:doc.to,attn:doc.attn,phone:doc.phone};
     if(i>=0)state.customers[i]=rec; else state.customers.push(rec);
     save(); fillCustSel(); toast(i>=0?"거래처를 갱신했습니다.":"거래처를 저장했습니다.");
+    sheetPush({action:"saveCustomers",list:state.customers},"거래처");
   };
 
   $("prodPick").onchange=function(){
@@ -785,17 +825,28 @@ function wire(){
              doc:JSON.parse(JSON.stringify(doc))};
     if(i>=0)state.archive[i]=rec; else { state.archive.push(rec); bump(); }
     await save(); fillCustSel();
+    await sheetPush({action:"saveDoc",rec:rec},"거래 내역");
     toast("거래 내역에 저장했습니다. ("+doc.no+")");
   };
 
   ["lgFrom","lgTo","lgCust","lgStatus"].forEach(function(id){ $(id).onchange=renderLedger; });
   $("btnCsv").onclick=exportCsv;
 
-  $("btnNewProd").onclick=function(){ state.products.push({name:"신규 품목",en:"",vintage:"",unit:"병",price:0}); save(); renderProd(); fillProdSel(); };
+  $("btnNewProd").onclick=function(){ state.products.push({name:"신규 품목",en:"",vintage:"",unit:"병",price:0}); save(); renderProd(); fillProdSel(); sheetPush({action:"saveProducts",list:state.products},"품목"); };
   $("btnSaveSet").onclick=async function(){
+    var prevSheet=state.supplier.sheetUrl||"";
     Object.keys(SF).forEach(function(id){ state.supplier[SF[id]]=$(id).value; });
     await save(); renderPaper(); toast("회사 정보를 저장했습니다.");
+    if(sheetOn() && state.supplier.sheetUrl!==prevSheet){ await sheetLoad(false); fillCustSel(); fillProdSel(); bindSet(); }
   };
+  $("btnSheetTest").onclick=async function(){
+    state.supplier.sheetUrl=$("sSheetUrl").value;
+    if(!sheetOn()){ $("sheetState").textContent="URL 형식이 아닙니다. https://script.google.com/macros/s/…/exec 형태여야 합니다."; return; }
+    $("sheetState").textContent="연결 중…";
+    try{ var j=await sheetApi({action:"ping"}); $("sheetState").textContent="연결 성공: "+j.sheet; await save(); }
+    catch(e){ $("sheetState").textContent="연결 실패: "+e.message+" — 배포 설정(액세스: 모든 사용자)을 확인하세요."; }
+  };
+  $("btnSheetSync").onclick=async function(){ if(await sheetLoad(false)){ fillCustSel(); fillProdSel(); bindSet(); } };
   $("sLogo").onchange=async function(){ if(this.files[0]){ state.supplier.logo=await fileToB64(this.files[0]); await save(); renderPaper(); toast("로고를 등록했습니다."); } };
   $("sStamp").onchange=async function(){ if(this.files[0]){ state.supplier.stamp=await fileToB64(this.files[0]); await save(); renderPaper(); toast("직인을 등록했습니다."); } };
   $("btnClrLogo").onclick=async function(){ state.supplier.logo=""; await save(); renderPaper(); };
@@ -830,6 +881,7 @@ function wire(){
   if((state.priceVer||0)<DEF.priceVer){ state.products=JSON.parse(JSON.stringify(DEF.products)); state.priceVer=DEF.priceVer; }
   doc=newDoc(); doc.no=nextNo();
   wire(); fillCustSel(); fillProdSel(); bindDoc(); renderLines(); renderPaper();
+  if(sheetOn()){ sheetLoad(true).then(function(ok){ if(ok){ fillCustSel(); fillProdSel(); if(!doc.to){ doc.no=nextNo(); bindDoc(); renderPaper(); } } }); }
   var d=new Date(); d.setMonth(d.getMonth()-3);
   $("lgFrom").value=d.toISOString().slice(0,10); $("lgTo").value=todayISO();
   if(!l) save();
