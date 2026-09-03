@@ -199,7 +199,6 @@
           <button class="b-kakao" id="btnShareFile">카카오톡·문자로 이미지 보내기</button>
         </div>
         <div class="bar" style="margin-top:8px">
-          <button id="btnMsg">전송 문구 복사</button>
           <button class="b-dark" id="btnSaveDoc">거래 내역에 저장</button>
         </div>
         <div class="mini" id="shareMsg" style="margin-top:7px"></div>
@@ -597,8 +596,7 @@ async function shareFile(){
       $("shareMsg").textContent="공유 시트에서 카카오톡 → 채팅방을 선택하면 사진으로 전송됩니다.";
     }else{
       var a=document.createElement("a"); a.download=fileName(); a.href=cv.toDataURL("image/png"); a.click();
-      try{ await navigator.clipboard.writeText(buildMsg()); }catch(e2){}
-      $("shareMsg").innerHTML="PC 브라우저는 카카오톡·문자로 직접 보낼 수 없습니다. PNG를 다운로드 폴더에 저장하고 전송 문구를 복사했으니, 카카오톡 PC 채팅방에 파일을 끌어다 놓고 Ctrl+V 하세요. 폰에서 이 버튼을 누르면 카카오톡·메시지로 바로 보낼 수 있습니다.";
+      $("shareMsg").innerHTML="PC 브라우저는 카카오톡·문자로 직접 보낼 수 없어 PNG를 다운로드 폴더에 저장했습니다. 카카오톡 PC 채팅방에 파일을 끌어다 놓으세요. 폰에서 이 버튼을 누르면 카카오톡·메시지로 바로 보낼 수 있습니다.";
     }
   }catch(e){ $("shareMsg").innerHTML="<span style='color:#9b1c1c'>"+esc(e.message)+"</span>"; }
 }
@@ -811,7 +809,6 @@ function wire(){
   $("btnPrint").onclick=function(){ renderPaper(); window.print(); };
   $("btnPng").onclick=savePng;
   $("btnShareFile").onclick=shareFile;
-  $("btnMsg").onclick=copyMsg;
 
   $("btnSaveDoc").onclick=async function(){
     var c=calc();
