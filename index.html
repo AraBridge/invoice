@@ -806,14 +806,17 @@ function wire(){
     if(!confirm("작성 중인 내용을 지우고 새로 시작할까요?"))return;
     doc=newDoc(); doc.no=nextNo(); bindDoc(); renderLines(); renderPaper();
   };
-  $("btnPrint").onclick=function(){ renderPaper(); window.print(); };
-  $("btnPng").onclick=savePng;
-  $("btnShareFile").onclick=shareFile;
+  $("btnPrint").onclick=async function(){ renderPaper(); await saveDoc(true); window.print(); };
+  $("btnPng").onclick=async function(){ await saveDoc(true); savePng(); };
+  $("btnShareFile").onclick=async function(){ await saveDoc(true); shareFile(); };
 
-  $("btnSaveDoc").onclick=async function(){
+  $("btnSaveDoc").onclick=function(){ saveDoc(false); };
+}
+/* 거래 내역 저장. quiet=true면 발행 버튼에서 자동 호출된 경우(입력 부족 시 조용히 건너뜀) */
+async function saveDoc(quiet){
     var c=calc();
-    if(!doc.to){ toast("수신 상호를 입력하세요.",1); return; }
-    if(c.total<=0){ toast("품목과 수량을 입력하세요.",1); return; }
+    if(!doc.to){ if(!quiet) toast("수신 상호를 입력하세요.",1); return false; }
+    if(c.total<=0){ if(!quiet) toast("품목과 수량을 입력하세요.",1); return false; }
     if(!doc.no){ doc.no=nextNo(); $("docNo").value=doc.no; }
     var items=c.rows.filter(function(r){return r.l.name&&r.q>0}).map(function(r){return r.l.name+(r.l.vintage?" "+r.l.vintage:"")+" "+r.q}).join(", ");
     var i=state.archive.findIndex(function(a){return a.no===doc.no});
@@ -823,9 +826,10 @@ function wire(){
     if(i>=0)state.archive[i]=rec; else { state.archive.push(rec); bump(); }
     await save(); fillCustSel();
     await sheetPush({action:"saveDoc",rec:rec},"거래 내역");
-    toast("거래 내역에 저장했습니다. ("+doc.no+")");
-  };
-
+    toast((i>=0?"거래 내역을 갱신했습니다. (":"거래 내역에 저장했습니다. (")+doc.no+")");
+    return true;
+}
+function wire2(){
   ["lgFrom","lgTo","lgCust","lgStatus"].forEach(function(id){ $(id).onchange=renderLedger; });
   $("btnCsv").onclick=exportCsv;
 
@@ -877,7 +881,7 @@ function wire(){
   if(!state.supplier.logo || (state.logoVer||0)<3){ state.supplier.logo=DEF.supplier.logo; state.supplier.stamp=DEF.supplier.stamp; state.logoVer=3; }
   if((state.priceVer||0)<DEF.priceVer){ state.products=JSON.parse(JSON.stringify(DEF.products)); state.priceVer=DEF.priceVer; }
   doc=newDoc(); doc.no=nextNo();
-  wire(); fillCustSel(); fillProdSel(); bindDoc(); renderLines(); renderPaper();
+  wire(); wire2(); fillCustSel(); fillProdSel(); bindDoc(); renderLines(); renderPaper();
   if(sheetOn()){ sheetLoad(true).then(function(ok){ if(ok){ fillCustSel(); fillProdSel(); if(!doc.to){ doc.no=nextNo(); bindDoc(); renderPaper(); } } }); }
   var d=new Date(); d.setMonth(d.getMonth()-3);
   $("lgFrom").value=d.toISOString().slice(0,10); $("lgTo").value=todayISO();
