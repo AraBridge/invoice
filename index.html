@@ -509,6 +509,7 @@ async function shareViaKakaoSdk(cv){
   var up=await Kakao.Share.uploadImage({file:[f]});
   var url=up&&up.infos&&up.infos.original&&up.infos.original.url;
   if(!url) throw new Error("이미지 업로드 결과를 받지 못했습니다.");
+  url=url.replace(/^http:\/\//i,"https://");
   var c=calc();
   var site=(state.supplier.siteUrl||location.href.split("?")[0]).trim();
   var view=site+(site.indexOf("?")>=0?"&":"?")+"img="+encodeURIComponent(url);
@@ -782,6 +783,7 @@ function wire(){
   if(!m) return;
   var u="";
   try{ u=decodeURIComponent(m[1]); }catch(e){ u=m[1]; }
+  u=u.replace(/^http:\/\//i,"https://");
   var ok=/^https:\/\/[^\s'"<>]+$/i.test(u);
   document.documentElement.innerHTML="<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>거래명세서</title></head><body style='margin:0;background:#fff'>"
     +(ok?"<div style='padding:8px;text-align:center'><img src='"+u.replace(/'/g,"")+"' style='max-width:100%;height:auto' alt='거래명세서'><div style='margin-top:10px;font-size:12px;color:#666;font-family:sans-serif'>이미지를 길게 눌러 저장할 수 있습니다.</div></div>"
