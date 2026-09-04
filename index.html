@@ -511,8 +511,8 @@ function buildLogi(){
   }).join("\n");
   var who=(doc.attn||"").replace(/\s*귀하$/,"");
   return "안녕하세요 "+(s.logiName||"담당자님")+",\n\n다음 주소로 와인 배송 부탁드립니다.\n\n"
-    + "주소: "+(doc.addr||"")+"\n"
     + "업장: "+(doc.to||"")+"\n"
+    + "주소: "+(doc.addr||"")+"\n"
     + "품목:\n"+(items||"(품목 없음)")+"\n\n"
     + "수취인: "+(who||"")+"\n전화번호: "+(doc.phone||"")+"\n\n감사합니다.";
 }
