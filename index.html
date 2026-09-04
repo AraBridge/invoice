@@ -545,7 +545,16 @@ async function sheetLoad(silent){
   if(!sheetOn()) return false;
   try{
     var j=await sheetApi({action:"load"});
-    state.customers=j.customers||[];
+    /* 시트 거래처에 주소·담당자·연락처가 비어 있으면 이 기기 저장값 또는 기본값으로 보충 */
+    var local=state.customers.concat(DEF.customers), fixedC=false;
+    var merged=(j.customers||[]).map(function(c){
+      var ref=local.find(function(x){return x.name===c.name});
+      if(ref){ ["addr","attn","phone"].forEach(function(k){ if(!c[k]&&ref[k]){ c[k]=ref[k]; fixedC=true; } }); }
+      return c;
+    });
+    DEF.customers.forEach(function(d){ if(!merged.some(function(x){return x.name===d.name})){ merged.push(JSON.parse(JSON.stringify(d))); fixedC=true; } });
+    state.customers=merged;
+    if(fixedC) await sheetApi({action:"saveCustomers",list:state.customers});
     if(j.products&&j.products.length){ state.products=j.products; repairProducts(); }
     else await sheetApi({action:"saveProducts",list:state.products});
     state.archive=(j.archive||[]).filter(function(a){return a.doc}).map(function(a){ a.id=a.no; return a; });
